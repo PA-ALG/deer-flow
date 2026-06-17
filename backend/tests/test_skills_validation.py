@@ -27,6 +27,16 @@ class TestValidateSkillFrontmatter:
         assert msg == "Skill is valid!"
         assert name == "my-skill"
 
+    def test_valid_skill_name_with_underscore(self, tmp_path):
+        skill_dir = _write_skill(
+            tmp_path,
+            "---\nname: nbev_profile\ndescription: A valid skill\n---\n\nBody\n",
+        )
+        valid, msg, name = _validate_skill_frontmatter(skill_dir)
+        assert valid is True
+        assert msg == "Skill is valid!"
+        assert name == "nbev_profile"
+
     def test_valid_with_all_allowed_fields(self, tmp_path):
         skill_dir = _write_skill(
             tmp_path,
@@ -116,14 +126,14 @@ class TestValidateSkillFrontmatter:
         assert valid is False
         assert "custom-field" in msg
 
-    def test_name_must_be_hyphen_case(self, tmp_path):
+    def test_name_must_be_lowercase_identifier(self, tmp_path):
         skill_dir = _write_skill(
             tmp_path,
             "---\nname: MySkill\ndescription: test\n---\n\nBody\n",
         )
         valid, msg, _ = _validate_skill_frontmatter(skill_dir)
         assert valid is False
-        assert "hyphen-case" in msg
+        assert "lowercase" in msg
 
     def test_name_no_leading_hyphen(self, tmp_path):
         skill_dir = _write_skill(
@@ -132,7 +142,7 @@ class TestValidateSkillFrontmatter:
         )
         valid, msg, _ = _validate_skill_frontmatter(skill_dir)
         assert valid is False
-        assert "hyphen" in msg
+        assert "separator" in msg
 
     def test_name_no_trailing_hyphen(self, tmp_path):
         skill_dir = _write_skill(
@@ -141,7 +151,7 @@ class TestValidateSkillFrontmatter:
         )
         valid, msg, _ = _validate_skill_frontmatter(skill_dir)
         assert valid is False
-        assert "hyphen" in msg
+        assert "separator" in msg
 
     def test_name_no_consecutive_hyphens(self, tmp_path):
         skill_dir = _write_skill(
@@ -150,7 +160,16 @@ class TestValidateSkillFrontmatter:
         )
         valid, msg, _ = _validate_skill_frontmatter(skill_dir)
         assert valid is False
-        assert "hyphen" in msg
+        assert "separator" in msg
+
+    def test_name_no_consecutive_underscores(self, tmp_path):
+        skill_dir = _write_skill(
+            tmp_path,
+            "---\nname: my__skill\ndescription: test\n---\n\nBody\n",
+        )
+        valid, msg, _ = _validate_skill_frontmatter(skill_dir)
+        assert valid is False
+        assert "separator" in msg
 
     def test_name_too_long(self, tmp_path):
         long_name = "a" * 65

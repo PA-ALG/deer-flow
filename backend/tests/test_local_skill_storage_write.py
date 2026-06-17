@@ -173,5 +173,5 @@ def test_allows_symlink_within_skill_dir(tmp_path, storage, skill_dir):
 )
 def test_rejects_invalid_skill_name_in_path_helpers(storage, name, method_name):
     method = getattr(storage, method_name)
-    with pytest.raises(ValueError, match="hyphen-case"):
+    with pytest.raises(ValueError, match="lowercase letters"):
         method(name)

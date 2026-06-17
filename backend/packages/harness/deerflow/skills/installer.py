@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 _PROMPT_INPUT_DIRS = {"references", "templates"}
 _PROMPT_INPUT_SUFFIXES = frozenset({".json", ".markdown", ".md", ".rst", ".txt", ".yaml", ".yml"})
+_IGNORED_ARCHIVE_DIRS = {"__pycache__"}
+_IGNORED_ARCHIVE_SUFFIXES = frozenset({".pyc", ".pyo"})
+_MAX_CONCURRENT_SECURITY_SCANS = 4
 
 
 class SkillAlreadyExistsError(ValueError):
@@ -57,6 +60,11 @@ def is_symlink_member(info: zipfile.ZipInfo) -> bool:
 def should_ignore_archive_entry(path: Path) -> bool:
     """Return True for macOS metadata dirs and dotfiles."""
     return path.name.startswith(".") or path.name == "__MACOSX"
+
+
+def should_ignore_installed_archive_member(path: PurePosixPath) -> bool:
+    """Return True for generated cache artifacts that should not be installed."""
+    return any(part in _IGNORED_ARCHIVE_DIRS for part in path.parts) or path.suffix.lower() in _IGNORED_ARCHIVE_SUFFIXES
 
 
 def resolve_skill_dir_from_archive(temp_path: Path) -> Path:
@@ -105,7 +113,12 @@ def safe_extract_skill_archive(
             continue
 
         normalized_name = posixpath.normpath(info.filename.replace("\\", "/"))
-        member_path = dest_root.joinpath(*PurePosixPath(normalized_name).parts)
+        archive_path = PurePosixPath(normalized_name)
+        if should_ignore_installed_archive_member(archive_path):
+            logger.debug("Skipping generated cache artifact in skill archive: %s", info.filename)
+            continue
+
+        member_path = dest_root.joinpath(*archive_path.parts)
         if not member_path.resolve().is_relative_to(dest_root):
             raise ValueError(f"Zip entry escapes destination: {info.filename!r}")
         member_path.parent.mkdir(parents=True, exist_ok=True)
@@ -127,6 +140,8 @@ def _is_script_support_file(rel_path: Path) -> bool:
 
 
 def _should_scan_support_file(rel_path: Path) -> bool:
+    if should_ignore_installed_archive_member(PurePosixPath(rel_path.as_posix())):
+        return False
     if _is_script_support_file(rel_path):
         return True
     return bool(rel_path.parts) and rel_path.parts[0] in _PROMPT_INPUT_DIRS and rel_path.suffix.lower() in _PROMPT_INPUT_SUFFIXES
@@ -184,6 +199,7 @@ async def _scan_skill_archive_contents_or_raise(skill_dir: Path, skill_name: str
     skill_md = skill_dir / "SKILL.md"
     await _scan_skill_file_or_raise(skill_dir, skill_md, skill_name, executable=False)
 
+    scan_targets: list[tuple[Path, bool]] = []
     for path in await asyncio.to_thread(_collect_scannable_files, skill_dir):
         rel_path = path.relative_to(skill_dir)
         if rel_path == Path("SKILL.md"):
@@ -193,7 +209,21 @@ async def _scan_skill_archive_contents_or_raise(skill_dir: Path, skill_name: str
         if not _should_scan_support_file(rel_path):
             continue
 
-        await _scan_skill_file_or_raise(skill_dir, path, skill_name, executable=_is_script_support_file(rel_path))
+        scan_targets.append((path, _is_script_support_file(rel_path)))
+
+    semaphore = asyncio.Semaphore(_MAX_CONCURRENT_SECURITY_SCANS)
+
+    async def _scan_with_limit(path: Path, executable: bool) -> None:
+        async with semaphore:
+            await _scan_skill_file_or_raise(skill_dir, path, skill_name, executable=executable)
+
+    results = await asyncio.gather(
+        *(_scan_with_limit(path, executable) for path, executable in scan_targets),
+        return_exceptions=True,
+    )
+    for result in results:
+        if isinstance(result, Exception):
+            raise result
 
 
 def _run_async_install(coro):

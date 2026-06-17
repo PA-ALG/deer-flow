@@ -1,8 +1,10 @@
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.gateway.deps import get_config
@@ -19,6 +21,10 @@ from deerflow.skills.types import SKILL_MD_FILE, SkillCategory
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["skills"])
+
+SKILL_UPLOAD_CHUNK_SIZE = 1024 * 1024
+MAX_SKILL_UPLOAD_SIZE = 100 * 1024 * 1024
+SKILL_UPLOAD_EXTENSIONS = {".skill", ".zip"}
 
 
 class SkillResponse(BaseModel):
@@ -85,6 +91,41 @@ def _skill_to_response(skill: Skill) -> SkillResponse:
     )
 
 
+async def _write_uploaded_skill_archive(file: UploadFile) -> Path:
+    """Persist an uploaded skill archive to a temporary .skill file."""
+    filename = Path(file.filename or "").name
+    suffix = Path(filename).suffix.lower()
+    if suffix not in SKILL_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Skill archive must be a .zip or .skill file")
+
+    tmp_handle = tempfile.NamedTemporaryFile(delete=False, suffix=".skill")
+    tmp_path = Path(tmp_handle.name)
+    total_size = 0
+
+    try:
+        with tmp_handle:
+            while chunk := await file.read(SKILL_UPLOAD_CHUNK_SIZE):
+                total_size += len(chunk)
+                if total_size > MAX_SKILL_UPLOAD_SIZE:
+                    raise HTTPException(status_code=413, detail="Skill archive is too large")
+                tmp_handle.write(chunk)
+    except Exception:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+    if total_size == 0:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise HTTPException(status_code=400, detail="Skill archive is empty")
+
+    return tmp_path
+
+
 @router.get(
     "/skills",
     response_model=SkillsListResponse,
@@ -123,6 +164,39 @@ async def install_skill(request: SkillInstallRequest, config: AppConfig = Depend
     except Exception as e:
         logger.error(f"Failed to install skill: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to install skill: {str(e)}")
+
+
+@router.post(
+    "/skills/upload",
+    response_model=SkillInstallResponse,
+    summary="Upload And Install Skill",
+    description="Upload a .zip or .skill archive, validate it, and install it into skills/custom.",
+)
+async def upload_skill(file: UploadFile = File(...), config: AppConfig = Depends(get_config)) -> SkillInstallResponse:
+    tmp_path: Path | None = None
+    try:
+        tmp_path = await _write_uploaded_skill_archive(file)
+        result = await get_or_new_skill_storage(app_config=config).ainstall_skill_from_archive(tmp_path)
+        await refresh_skills_system_prompt_cache_async()
+        return SkillInstallResponse(**result)
+    except SkillAlreadyExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to upload skill archive: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to upload skill archive: {str(e)}")
+    finally:
+        await file.close()
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                logger.warning("Failed to remove uploaded skill temp file: %s", tmp_path, exc_info=True)
 
 
 @router.get("/skills/custom", response_model=SkillsListResponse, summary="List Custom Skills")

@@ -433,6 +433,11 @@ export interface Translations {
       title: string;
       description: string;
       createSkill: string;
+      uploadSkill: string;
+      uploadingSkill: string;
+      uploadSuccess: string;
+      uploadError: string;
+      uploadInvalidFile: string;
       emptyTitle: string;
       emptyDescription: string;
       emptyButton: string;

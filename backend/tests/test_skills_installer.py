@@ -247,6 +247,7 @@ class TestInstallSkillFromArchive:
             zf.writestr("test-skill/references/guide.md", "# Guide\n")
             zf.writestr("test-skill/templates/prompt.txt", "Use care.\n")
             zf.writestr("test-skill/scripts/run.sh", "#!/bin/sh\necho ok\n")
+            zf.writestr("test-skill/scripts/profile_core/__pycache__/__init__.cpython-312.pyc", b"\x00\x01\x02")
             zf.writestr("test-skill/assets/logo.png", b"\x89PNG\r\n\x1a\n")
             zf.writestr("test-skill/references/.env", "TOKEN=secret\n")
             zf.writestr("test-skill/templates/config.cfg", "TOKEN=secret\n")
@@ -285,6 +286,7 @@ class TestInstallSkillFromArchive:
             },
         ]
         assert all("secret" not in call["content"] for call in calls)
+        assert not (skills_root / "custom" / "test-skill" / "scripts" / "profile_core" / "__pycache__").exists()
 
     def test_nested_skill_markdown_prevents_install(self, tmp_path):
         zip_path = tmp_path / "test-skill.skill"

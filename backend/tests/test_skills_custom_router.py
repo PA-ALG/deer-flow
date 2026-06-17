@@ -63,6 +63,7 @@ def _make_skill_archive_bytes(name: str, content: str | None = None) -> bytes:
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr(f"{name}/SKILL.md", skill_content)
         zf.writestr(f"{name}/references/guide.md", "# Guide\n")
+        zf.writestr(f"{name}/scripts/profile_core/__pycache__/__init__.cpython-312.pyc", b"\x00\x01\x02")
     return buffer.getvalue()
 
 
@@ -110,6 +111,59 @@ def test_install_skill_archive_runs_security_scan(monkeypatch, tmp_path):
             "executable": False,
             "location": "archive-skill/SKILL.md",
         }
+    ]
+    assert refresh_calls == ["refresh"]
+
+
+def test_upload_skill_zip_installs_custom_skill(monkeypatch, tmp_path):
+    skill_name = "uploaded_skill"
+    skills_root = tmp_path / "skills"
+    (skills_root / "custom").mkdir(parents=True)
+    scan_calls = []
+    refresh_calls = []
+
+    async def _scan(content, *, executable, location, app_config=None):
+        from deerflow.skills.security_scanner import ScanResult
+
+        scan_calls.append({"content": content, "executable": executable, "location": location})
+        return ScanResult(decision="allow", reason="ok")
+
+    async def _refresh():
+        refresh_calls.append("refresh")
+
+    from deerflow.skills.storage.local_skill_storage import LocalSkillStorage
+
+    storage = LocalSkillStorage(host_path=str(skills_root))
+    config = SimpleNamespace(
+        skills=SimpleNamespace(get_skills_path=lambda: skills_root, container_path="/mnt/skills", use="deerflow.skills.storage.local_skill_storage:LocalSkillStorage"),
+        skill_evolution=SimpleNamespace(enabled=True, moderation_model_name=None),
+    )
+    monkeypatch.setattr(skills_router, "get_or_new_skill_storage", lambda **kw: storage)
+    monkeypatch.setattr("deerflow.skills.installer.scan_skill_content", _scan)
+    monkeypatch.setattr(skills_router, "refresh_skills_system_prompt_cache_async", _refresh)
+
+    app = _make_test_app(config)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/skills/upload",
+            files={"file": ("uploaded_skill.zip", BytesIO(_make_skill_archive_bytes(skill_name)), "application/zip")},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["skill_name"] == skill_name
+    assert (skills_root / "custom" / skill_name / "SKILL.md").exists()
+    assert scan_calls == [
+        {
+            "content": _skill_content(skill_name),
+            "executable": False,
+            "location": f"{skill_name}/SKILL.md",
+        },
+        {
+            "content": "# Guide\n",
+            "executable": False,
+            "location": f"{skill_name}/references/guide.md",
+        },
     ]
     assert refresh_calls == ["refresh"]
 

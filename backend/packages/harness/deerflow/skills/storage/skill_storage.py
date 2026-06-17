@@ -12,7 +12,7 @@ from deerflow.skills.types import SKILL_MD_FILE, Skill, SkillCategory  # noqa: F
 
 logger = logging.getLogger(__name__)
 
-_SKILL_NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_SKILL_NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
 
 
 class SkillStorage(ABC):
@@ -36,7 +36,7 @@ class SkillStorage(ABC):
         """Validate and normalise a skill name; return the normalised form."""
         normalized = name.strip()
         if not _SKILL_NAME_PATTERN.fullmatch(normalized):
-            raise ValueError("Skill name must be hyphen-case using lowercase letters, digits, and hyphens only.")
+            raise ValueError("Skill name must use lowercase letters, digits, hyphens, or underscores only.")
         if len(normalized) > 64:
             raise ValueError("Skill name must be 64 characters or fewer.")
         return normalized

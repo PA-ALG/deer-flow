@@ -66,11 +66,13 @@ def _validate_skill_frontmatter(skill_dir: Path) -> tuple[bool, str, str | None]
     if not name:
         return False, "Name cannot be empty", None
 
-    # Check naming convention (hyphen-case: lowercase with hyphens)
-    if not re.match(r"^[a-z0-9-]+$", name):
-        return False, f"Name '{name}' should be hyphen-case (lowercase letters, digits, and hyphens only)", None
-    if name.startswith("-") or name.endswith("-") or "--" in name:
-        return False, f"Name '{name}' cannot start/end with hyphen or contain consecutive hyphens", None
+    # Check naming convention. Existing custom skills may use underscores, so
+    # accept both hyphenated and underscored lowercase identifiers while still
+    # rejecting path separators, traversal, uppercase, and empty segments.
+    if not re.match(r"^[a-z0-9_-]+$", name):
+        return False, f"Name '{name}' should use lowercase letters, digits, hyphens, or underscores only", None
+    if name.startswith(("-", "_")) or name.endswith(("-", "_")) or "--" in name or "__" in name:
+        return False, f"Name '{name}' cannot start/end with a separator or contain consecutive separators", None
     if len(name) > 64:
         return False, f"Name is too long ({len(name)} characters). Maximum is 64 characters.", None
 
