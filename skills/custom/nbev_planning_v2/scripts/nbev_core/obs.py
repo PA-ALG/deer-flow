@@ -32,7 +32,11 @@ if not _logger.handlers:  # 防止重复加 handler（多次 import）
 def log(event: str, *, level: str = "INFO", **fields) -> None:
     """输出一行结构化 JSON 日志。失败绝不影响主流程。"""
     try:
-        record = {"ts": round(time.time(), 3), "event": event, **fields}
+        try:
+            from .config import APP_ENV as _env
+        except Exception:
+            _env = "?"
+        record = {"ts": round(time.time(), 3), "env": _env, "event": event, **fields}
         line = json.dumps(record, ensure_ascii=False, default=str)
         _logger.log(getattr(logging, level.upper(), logging.INFO), line)
     except Exception:

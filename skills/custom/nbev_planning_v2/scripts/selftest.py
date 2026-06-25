@@ -179,6 +179,26 @@ def main():
     check("基准失败不影响主测算", out2["results"][0]["status"] == "success")
     check("基准失败标记不可用", out2["results"][0]["comparison"]["available"] is False)
 
+    print("== 多环境配置 ==")
+    import importlib
+    from nbev_core import config as _cfg
+    # 当前进程已加载的环境（取决于启动时 APP_ENV，缺省 dev）
+    check("配置含 APP_ENV", _cfg.APP_ENV in ("dev", "stg", "prd"))
+    check("配置含 API_BASE", isinstance(_cfg.API_BASE, str) and _cfg.API_BASE.startswith("http"))
+    check("有效环境表", _cfg._VALID_ENVS == ("dev", "stg", "prd"))
+    check("默认环境为dev", _cfg._DEFAULT_ENV == "dev")
+    # 非法 APP_ENV 解析回退 dev
+    import os
+    _old = os.environ.get("APP_ENV")
+    os.environ["APP_ENV"] = "prod1"
+    check("非法APP_ENV回退dev", _cfg._resolve_env() == "dev")
+    os.environ["APP_ENV"] = "prd"
+    check("APP_ENV=prd正确解析", _cfg._resolve_env() == "prd")
+    if _old is None:
+        os.environ.pop("APP_ENV", None)
+    else:
+        os.environ["APP_ENV"] = _old
+
     print()
     if _fails:
         print(f"FAILED: {len(_fails)} 项 -> {_fails}")

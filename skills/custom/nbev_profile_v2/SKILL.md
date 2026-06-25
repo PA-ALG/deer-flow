@@ -35,6 +35,8 @@ description: 万能营销画像（现状分析）。当内勤想查看机构当�
 
 ## 第三步：调用脚本
 
+> **⚠️ 一轮只调用一次本脚本**：要看多个维度时，把维度一起传给 `-d`（如 `队伍 客户 产品`），脚本内部会顺序查完所有维度，**只需一次调用**。绝不要每个维度各调一次、也不要在同一轮里再调其他脚本，否则会触发框架的 sandbox 并发冲突。
+
 ```bash
 # 查全部三维画像（缺省月份=当前月1号）
 python scripts/run_profile.py --user-id "{当前登录用户ID}" --format md
@@ -107,4 +109,5 @@ python scripts/run_profile.py --user-id "{当前登录用户ID}" -d 队伍 -m 20
   - `interpreters.py` 行聚合+预渲染MD表 · `render.py` 拼装 · `envelope.py` 信封 · `errors.py` 错误体系
   - `org_context.py` 机构解析（**当前写死 05/深圳**）
   - `config.py` 维度→(tableName, sqlid)映射 + 环境变量
-- 环境变量：`PROFILE_QUERY_API_BASE`、`PROFILE_QUERY_TIMEOUT`、`PROFILE_QUERY_MAX_RETRY`
+- 多环境配置（对齐 DeerFlow 范式）：接口地址按环境放在 `scripts/profile_core/config/config.{dev,stg,prd}.yaml`，**默认 dev**。切换：设 `APP_ENV=dev|stg|prd`，或 `DEER_FLOW_CONFIG_PATH` 直接指定文件；单项变量 `PROFILE_QUERY_API_BASE` 可临时覆盖（优先级最高）。非法 APP_ENV 告警回退 dev，日志带 `env` 字段。
+- 其他环境变量：`PROFILE_QUERY_TIMEOUT`、`PROFILE_QUERY_MAX_RETRY`、`NBEV_LOG_LEVEL`

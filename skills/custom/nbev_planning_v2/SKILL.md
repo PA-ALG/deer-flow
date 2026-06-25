@@ -57,6 +57,8 @@ python scripts/run_playbook.py --user-id "{登录用户ID}" [-m YYYY-MM-01] --fo
 
 ## 第三步：调用脚本
 
+> **⚠️ 一轮只调用一次本脚本**：要测多个维度时，把维度一起传给 `--dimensions`（如 `产品 队伍 客户`），脚本内部会顺序跑完所有维度并自动做同比，**只需一次调用**。绝不要每个维度各调一次、也不要在同一轮里再调其他脚本，否则会触发框架的 sandbox 并发冲突。
+
 ```bash
 python scripts/run_planning.py \
   --user-id "{当前登录用户ID}" \
@@ -133,5 +135,9 @@ python scripts/run_planning.py \
   - `interpreters.py` 解读+护栏 · `render.py` Markdown渲染 · `envelope.py` 信封 · `errors.py` 错误体系
   - `org_context.py` 机构解析（**当前写死 05/深圳**，未来替换此文件一处即可）
   - `config.py` 环境变量配置
-- 后端测算接口：`http://8.148.158.241:8001/api/v1/marketing-planning/get-{product|team|customer}-card-data`
-- 环境变量：`MARKETING_PLANNING_API_BASE`（默认上述地址）、`MARKETING_PLANNING_TIMEOUT`、`MARKETING_PLANNING_MAX_RETRY`、`NBEV_LOG_LEVEL`
+- 多环境配置（对齐 DeerFlow 范式）：接口地址等按环境放在 `scripts/nbev_core/config/config.{dev,stg,prd}.yaml`，**默认 dev**。切换方式：
+  - 设 `APP_ENV=dev|stg|prd` 选择环境；
+  - 或设 `DEER_FLOW_CONFIG_PATH=/abs/path/config.xxx.yaml` 直接指定配置文件（官方变量）；
+  - 单项环境变量（如 `MARKETING_PLANNING_API_BASE`）可临时覆盖单个值，优先级最高，便于调试。
+  - 解析优先级：单项环境变量 > DEER_FLOW_CONFIG_PATH > APP_ENV 选中的文件 > 内置兜底。非法 APP_ENV 会告警并回退 dev；日志带 `env` 字段便于排障。
+- 其他环境变量：`MARKETING_PLANNING_TIMEOUT`、`MARKETING_PLANNING_MAX_RETRY`、`NBEV_YOY_COMPARE`、`NBEV_LOG_LEVEL`、`GUARD_SHOUZUAN_LOW/HIGH`
