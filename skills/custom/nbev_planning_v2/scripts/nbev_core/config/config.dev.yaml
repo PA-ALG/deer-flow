@@ -1,0 +1,15 @@
+# 营销规划 skill —— 开发环境（dev，默认）
+# 切换环境：设 APP_ENV=dev|stg|prd；或用 DEER_FLOW_CONFIG_PATH 直接指定本类文件路径
+env: dev
+api:
+  # 达成测算接口基址（三接口共享前缀）
+  base: "http://8.148.158.241:8001/api/v1/marketing-planning"
+  timeout: 60
+  max_retry: 2
+features:
+  # 同比对比：测算后是否再查参考月做去年同期基准（多一次调用）
+  yoy_compare: true
+guards:
+  # 寿钻 NBEV 占比合理区间
+  shouzuan_low: 0.80
+  shouzuan_high: 0.90

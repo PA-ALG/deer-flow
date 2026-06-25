@@ -1,0 +1,7 @@
+# 营销画像 skill —— 开发环境（dev，默认）
+env: dev
+api:
+  # 画像查询服务基址
+  base: "http://8.148.158.241:8000/api"
+  timeout: 30
+  max_retry: 2

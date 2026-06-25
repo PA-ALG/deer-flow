@@ -1,0 +1,6 @@
+# 营销画像 skill —— 生产环境（prd）
+env: prd
+api:
+  base: "http://8.148.158.241:8000/api"
+  timeout: 30
+  max_retry: 2

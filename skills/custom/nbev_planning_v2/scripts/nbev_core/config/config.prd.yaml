@@ -1,0 +1,11 @@
+# 营销规划 skill —— 生产环境（prd）
+env: prd
+api:
+  base: "http://8.148.158.241:8001/api/v1/marketing-planning"
+  timeout: 60
+  max_retry: 2
+features:
+  yoy_compare: true
+guards:
+  shouzuan_low: 0.80
+  shouzuan_high: 0.90

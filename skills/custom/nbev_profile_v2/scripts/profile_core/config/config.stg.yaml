@@ -1,0 +1,6 @@
+# 营销画像 skill —— 测试/预发环境（stg）
+env: stg
+api:
+  base: "http://8.148.158.241:8000/api"
+  timeout: 30
+  max_retry: 2
