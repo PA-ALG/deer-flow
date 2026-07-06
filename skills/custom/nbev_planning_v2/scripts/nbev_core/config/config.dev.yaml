@@ -3,7 +3,7 @@
 env: dev
 api:
   # 达成测算接口基址（三接口共享前缀）
-  base: "http://8.148.158.241:8001/api/v1/marketing-planning"
+  base: "http://127.0.0.1:8100/api/v1/marketing-planning"  # dev=本地mock(mock/nbev_mock_server.py),自包含
   timeout: 60
   max_retry: 2
 features:

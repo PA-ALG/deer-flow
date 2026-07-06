@@ -98,6 +98,11 @@ def render_results(out: dict) -> str:
     """把 plan() 的整体输出渲染为 Markdown 字符串。"""
     org = out.get("org", {})
     parts = []
+    # 状态可寻址:方案编号放最前面,用户随口一句"调整刚才的方案"就有确定性锚点
+    pid = out.get("plan_id")
+    if pid:
+        cached_mark = "(同参数命中缓存,未重新测算)" if out.get("cached") else ""
+        parts.append(f"**方案编号:`{pid}`**{cached_mark}　*后续想调整此方案,直接说\"把××调到××\"即可*\n")
     if org:
         parts.append(
             f"**机构：{org.get('org_name','')}（{org.get('org_id','')}）　测算月份：{org.get('month','')}**\n"

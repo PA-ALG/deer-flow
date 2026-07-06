@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import uuid
 
-from . import config, envelope
+from . import config, envelope, plan_store
 from .api_client import call_calculation
 from .errors import SkillError, ApiError, NeedClarify
 from .interpreters import INTERPRETERS
-from .org_context import resolve_org_context
+from .context import resolve_identity, resolve_org_context
 from .month_context import derive_month_context
 from .comparison import build_comparison
 from .next_actions import build_next_actions
@@ -55,7 +55,7 @@ def _month_ctx_dict(mc) -> dict:
 
 def plan(
     *,
-    user_id: str,
+    user_id: str | None = None,
     dimensions,
     target_nbev,
     month=None,
@@ -64,13 +64,26 @@ def plan(
     **opts,
 ) -> dict:
     """
-    主入口。返回 {request_id, org, results:[信封,...]}。
+    主入口。返回 {request_id, org, results:[信封,...], plan_id?}。
+    user_id 仅为本地调试兜底;生产身份由平台带外注入(见 context.resolve_identity)。
     opts 可含 combination / max_product_activity_rate / max_avg_fyp_range /
     max_double_gold_diamond_ratio。
     """
     request_id = request_id or f"req-{uuid.uuid4().hex[:12]}"
     session_id = session_id or f"sess-{uuid.uuid4().hex[:12]}"
     log("plan_start", request_id=request_id, dimensions=dimensions, target_nbev=target_nbev)
+
+    # 0.5) 带外身份解析(env 优先;全缺=部署故障,结构化报错,绝不向用户澄清身份)
+    try:
+        ident = resolve_identity(user_id)
+    except SkillError as e:
+        log("plan_identity_missing", level="ERROR", request_id=request_id)
+        return {
+            "request_id": request_id,
+            "results": [envelope.from_error(request_id=request_id, dimension="-", err=e)],
+            "next_actions": [],
+        }
+    log("plan_identity", request_id=request_id, user=ident.user_id, source=ident.source)
 
     # 0) 必填澄清：维度与目标NBEV缺失时，返回 needs_clarification（不报错、不猜测）
     missing = []
@@ -115,8 +128,8 @@ def plan(
             "next_actions": [],
         }
 
-    # 2) 机构解析（当前恒为 05/深圳；未来换接口不动此处调用）
-    org = resolve_org_context(user_id)
+    # 2) 机构解析(接缝:由带外身份派生,未来换用户中心接口不动此处调用)
+    org = resolve_org_context(ident.user_id)
 
     # 2.5) 业务月份上下文：判定节点类型 + 推导参考月（默认同比，可被 reference_month 覆盖）
     month_ctx = derive_month_context(mon, ref)
@@ -169,6 +182,26 @@ def plan(
 
     # 3) 按固定顺序逐维度调用（产品→队伍→客户）
     order = [d for d in config.DIMENSION_ORDER if d in dims]
+
+    # 2.8) 幂等/缓存(第八支柱):同参数指纹命中已保存方案 → 直接返回,不重打接口
+    cache_inputs = {
+        "skill": "nbev_planning_v2",
+        "org_id": org.org_id,
+        "dimensions": order,
+        "target_nbev": tgt,
+        "month": mon,
+        "reference_month": month_ctx.reference_month,
+        "opts": {k: opts.get(k) for k in (
+            "combination", "max_product_activity_rate",
+            "max_avg_fyp_range", "max_double_gold_diamond_ratio") if opts.get(k) is not None},
+    }
+    cached = plan_store.find_cached(cache_inputs)
+    if cached:
+        out = dict(cached.get("result") or {})
+        out["plan_id"] = cached.get("plan_id")
+        out["cached"] = True
+        log("plan_cached", request_id=request_id, plan_id=out["plan_id"])
+        return out
     results = []
     for dim in order:
         try:
@@ -196,10 +229,17 @@ def plan(
     next_actions = build_next_actions(results, order, month_ctx)
     log("plan_done", request_id=request_id, org_id=org.org_id, month=mon,
         month_type=month_ctx.month_type, statuses=statuses)
-    return {
+    out = {
         "request_id": request_id,
         "org": {"org_id": org.org_id, "org_name": org.org_name, "month": mon},
         "month_context": _month_ctx_dict(month_ctx),
         "results": results,
         "next_actions": next_actions,
     }
+    # 4.5) 状态可寻址(第八支柱):有成功维度即落盘,拿到 plan_id 供后续"改方案"引用。
+    # save 永不抛异常;落盘失败=优雅降级(结果照常返回,只是没有 plan_id)。
+    if any(r.get("status") == "success" for r in results):
+        pid = plan_store.save(out, inputs=cache_inputs)
+        if pid:
+            out["plan_id"] = pid
+    return out

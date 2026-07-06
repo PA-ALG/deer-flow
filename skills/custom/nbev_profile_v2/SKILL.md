@@ -1,6 +1,6 @@
 ---
 name: nbev_profile_v2
-version: 1.0.0
+version: 1.1.0
 author: marketing-planning-team
 compatibility: deerflow>=2.0
 description: 万能营销画像（现状分析）。当内勤想查看机构当前的队伍、客户、产品现状结构时使用。触发场景：队伍画像、客户画像、产品画像、万能营销画像、画像、队伍/客户/产品分析、看看现状/结构。能力边界——本skill只做"看现状画像"；若用户想规划"如何达成某NBEV目标"，改用 nbev_planning_v2；若用户想在已有规划上调整数值，改用 nbev_modify_v2。画像维度可选队伍/客户/产品，缺省则查全部三维。数据月份缺省取当前月1号。机构信息由登录用户自动解析（branch_code=org_id），无需也不应向用户索取。
@@ -26,7 +26,7 @@ description: 万能营销画像（现状分析）。当内勤想查看机构当�
   - 用户没指定 → **默认查全部三维**，不要问"先看哪个"。
   - 用户提到多个（如"客户画像或产品画像"）→ 把提到的维度**一次全查出来**展示，不要让用户二选一。
 - **数据月份（可选）**：缺省取**当前月1号**（如今天 2026-06-16 → 2026-06-01）。用户没说月份就直接用默认，**不要问月份**。
-- **机构信息**：由脚本依据登录用户自动解析（branch_code 即 org_id），**不要问用户、不要在命令里写机构**。
+- **机构信息与身份**：登录身份由平台自动注入脚本(带外传递)，机构由脚本据此解析(branch_code=org_id)。**不要问用户、不要在命令里写机构、不要传 --user-id**。
 
 **示例（务必照此行为）：**
 - 用户："看下画像" → 直接查全部三维并展示，不反问。
@@ -39,10 +39,10 @@ description: 万能营销画像（现状分析）。当内勤想查看机构当�
 
 ```bash
 # 查全部三维画像（缺省月份=当前月1号）
-python scripts/run_profile.py --user-id "{当前登录用户ID}" --format md
+python scripts/run_profile.py --format md
 
 # 只看队伍画像，指定月份
-python scripts/run_profile.py --user-id "{当前登录用户ID}" -d 队伍 -m 2026-06-01 --format md
+python scripts/run_profile.py -d 队伍 -m 2026-06-01 --format md
 ```
 
 - 维度固定按 **队伍 → 客户 → 产品** 顺序查询。
@@ -52,7 +52,7 @@ python scripts/run_profile.py --user-id "{当前登录用户ID}" -d 队伍 -m 20
 
 | 参数 | 短参 | 必填 | 说明 |
 |------|------|------|------|
-| `--user-id` | `-uid` | 是 | 登录用户ID，脚本据此解析机构（branch_code=org_id） |
+| `--user-id` | `-uid` | 否 | **不要传**。身份由平台带外注入(DEER_FLOW_USER_ID),仅本地调试可用 |
 | `--dimensions` | `-d` | 否 | `队伍` `客户` `产品` `全部`；缺省=全部三维 |
 | `--month` | `-m` | 否 | `YYYY-MM-01`，缺省=当前月1号 |
 | `--format` | `-f` | 否 | `md`（美观表格）/ `json`（默认） |

@@ -24,7 +24,8 @@ from nbev_core.planner import plan  # noqa: E402
 
 def parse_args():
     p = argparse.ArgumentParser(description="万能营销规划（从零新建）")
-    p.add_argument("--user-id", "-uid", required=True, help="登录用户ID，用于解析机构信息")
+    p.add_argument("--user-id", "-uid", default=None,
+                   help="本地调试兜底;生产身份由平台带外注入(DEER_FLOW_USER_ID),无需传参")
     p.add_argument("--dimensions", "-d", nargs="+", default=None,
                    help="测算维度，可多选：产品 客户 队伍（缺失会返回需澄清）")
     p.add_argument("--target-nbev", "-tv", default=None, help="目标NBEV（万元，缺失会返回需澄清）")

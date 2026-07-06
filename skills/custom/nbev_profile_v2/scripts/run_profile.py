@@ -20,7 +20,8 @@ from profile_core.profiler import profile  # noqa: E402
 
 def parse_args():
     p = argparse.ArgumentParser(description="万能营销画像查询")
-    p.add_argument("--user-id", "-uid", required=True, help="登录用户ID，用于解析机构（branch_code=org_id）")
+    p.add_argument("--user-id", "-uid", default=None,
+                   help="本地调试兜底;生产身份由平台带外注入(DEER_FLOW_USER_ID),无需传参")
     p.add_argument("--dimensions", "-d", nargs="+", default=None,
                    help="画像维度：队伍 客户 产品 全部；缺省=全部三维")
     p.add_argument("--month", "-m", default=None, help="数据月份 YYYY-MM-01，缺省=上个月1号")

@@ -2,6 +2,6 @@
 env: dev
 api:
   # 画像查询服务基址
-  base: "http://8.148.158.241:8000/api"
+  base: "http://127.0.0.1:8100/api"  # dev=本地mock(mock/nbev_mock_server.py),自包含
   timeout: 30
   max_retry: 2
