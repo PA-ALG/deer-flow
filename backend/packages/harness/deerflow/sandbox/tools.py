@@ -1044,6 +1044,34 @@ def _apply_cwd_prefix(command: str, thread_data: ThreadDataState | None) -> str:
     return command
 
 
+def _prepend_context_env(command: str, thread_data: ThreadDataState | None) -> str:
+    """Export authenticated user/thread context as env vars for the command.
+
+    Out-of-band identity channel (marketing-planning-agent P-2 patch):
+    - DEER_FLOW_USER_ID: the *authenticated* user from the gateway contextvar,
+      so skill scripts never rely on model-typed identity parameters;
+    - DEER_FLOW_THREAD_ID: cross-layer trace id (gateway ↔ model turns ↔ script logs);
+    - DEER_FLOW_OUTPUTS_DIR: host path of the per-thread outputs dir, letting
+      skill state stores (e.g. plan_store) persist addressable artifacts.
+    Values are shell-quoted; empty values are skipped.
+    """
+    from deerflow.runtime.user_context import get_effective_user_id
+
+    exports = []
+    user_id = get_effective_user_id()
+    if user_id:
+        exports.append(f"export DEER_FLOW_USER_ID={shlex.quote(str(user_id))}")
+    thread_id = _extract_thread_id_from_thread_data(thread_data)
+    if thread_id:
+        exports.append(f"export DEER_FLOW_THREAD_ID={shlex.quote(thread_id)}")
+    outputs_path = thread_data.get("outputs_path") if thread_data else None
+    if outputs_path:
+        exports.append(f"export DEER_FLOW_OUTPUTS_DIR={shlex.quote(str(outputs_path))}")
+    if not exports:
+        return command
+    return "; ".join(exports) + "; " + command
+
+
 def get_thread_data(runtime: Runtime | None) -> ThreadDataState | None:
     """Extract thread_data from runtime state."""
     if runtime is None:
@@ -1359,6 +1387,7 @@ def bash_tool(runtime: Runtime, description: str, command: str) -> str:
             validate_local_bash_command_paths(command, thread_data)
             command = replace_virtual_paths_in_command(command, thread_data)
             command = _apply_cwd_prefix(command, thread_data)
+            command = _prepend_context_env(command, thread_data)
             output = sandbox.execute_command(command)
             try:
                 from deerflow.config.app_config import get_app_config
