@@ -74,11 +74,11 @@ done
 # ── Stop helper ──────────────────────────────────────────────────────────────
 
 # Every deer-flow worktree (the main checkout + each linked worktree) hardcodes
-# the same dev ports (8001/3000/2026), so a service started from ANY of them
+# the same dev ports (8002/3001/2027), so a service started from ANY of them
 # must be reclaimable from here — otherwise `make stop`/`make dev` in this
 # worktree can neither kill nor take over a port held by a sibling worktree.
 # DEERFLOW_ROOTS is that set of roots; processes living outside all of them
-# (e.g. an unrelated project on port 3000) are still never touched.
+# (e.g. an unrelated project on port 3001) are still never touched.
 # Sorted most-specific-first (longest path first): a linked worktree lives
 # under the main checkout, so both roots are substrings of its files — checking
 # the deeper root first attributes a reclaimed port to the right worktree.
@@ -119,7 +119,7 @@ _is_deerflow_pid() {
 # (or starting, which stops first) isn't silently killing someone else's run.
 _report_reclaimed_ports() {
     local port pid files root owner
-    for port in 8001 3000 2026; do
+    for port in 8002 3001 2027; do
         for pid in $(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null); do
             _is_deerflow_pid "$pid" || continue
             files=$(lsof -p "$pid" 2>/dev/null)
@@ -255,13 +255,13 @@ stop_all() {
     nginx -c "$REPO_ROOT/docker/nginx/nginx.local.conf" -p "$REPO_ROOT" -s quit 2>/dev/null || true
     sleep 1
     _kill_repo_nginx
-    # Force-kill any survivors still holding the service ports. 2026 is included
+    # Force-kill any survivors still holding the service ports. 2027 is included
     # so a lingering nginx (or any deer-flow process) that _kill_repo_nginx did
     # not match by name still gets reclaimed — otherwise `make dev` fails its
     # nginx port preflight.
-    _kill_repo_port 8001
-    _kill_repo_port 3000
-    _kill_repo_port 2026
+    _kill_repo_port 8002
+    _kill_repo_port 3001
+    _kill_repo_port 2027
     ./scripts/cleanup-containers.sh deer-flow-sandbox 2>/dev/null || true
     echo "✓ All services stopped"
 }
@@ -293,13 +293,13 @@ fi
 
 # Frontend command
 if $DEV_MODE; then
-    FRONTEND_CMD="pnpm run dev"
+    FRONTEND_CMD="PORT=3001 pnpm run dev"
 else
     if ! PYTHON_BIN="$(_pick_python)"; then
         echo "Python is required to generate BETTER_AUTH_SECRET."
         exit 1
     fi
-    FRONTEND_CMD="env BETTER_AUTH_SECRET=$($PYTHON_BIN -c 'import secrets; print(secrets.token_hex(16))') pnpm run preview"
+    FRONTEND_CMD="env PORT=3001 BETTER_AUTH_SECRET=$($PYTHON_BIN -c 'import secrets; print(secrets.token_hex(16))') pnpm run preview"
 fi
 
 # Runtime path defaults. Local `make dev` launches Gateway from `backend/`,
@@ -400,9 +400,9 @@ echo ""
 echo "  Mode: $MODE_LABEL"
 echo ""
 echo "  Services:"
-echo "    Gateway     → localhost:8001  (REST API + agent runtime)"
-echo "    Frontend    → localhost:3000  (Next.js)"
-echo "    Nginx       → localhost:2026  (reverse proxy)"
+echo "    Gateway     → localhost:8002  (REST API + agent runtime)"
+echo "    Frontend    → localhost:3001  (Next.js)"
+echo "    Nginx       → localhost:2027  (reverse proxy)"
 echo ""
 
 # ── Cleanup handler ──────────────────────────────────────────────────────────
@@ -457,18 +457,18 @@ mkdir -p temp/client_body_temp temp/proxy_temp temp/fastcgi_temp temp/uwsgi_temp
 
 # 1. Gateway API
 run_service "Gateway" \
-    "cd backend && PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port 8001 $GATEWAY_EXTRA_FLAGS > ../logs/gateway.log 2>&1" \
-    8001 30
+    "cd backend && PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port 8002 $GATEWAY_EXTRA_FLAGS > ../logs/gateway.log 2>&1" \
+    8002 30
 
 # 2. Frontend
 run_service "Frontend" \
     "cd frontend && $FRONTEND_CMD > ../logs/frontend.log 2>&1" \
-    3000 120
+    3001 120
 
 # 3. Nginx
 run_service "Nginx" \
     "nginx -g 'daemon off;' -c '$REPO_ROOT/docker/nginx/nginx.local.conf' -p '$REPO_ROOT' > logs/nginx.log 2>&1" \
-    2026 10
+    2027 10
 
 # ── Ready ────────────────────────────────────────────────────────────────────
 
@@ -477,11 +477,11 @@ echo "=========================================="
 echo "  ✓ DeerFlow is running!  [$MODE_LABEL]"
 echo "=========================================="
 echo ""
-echo "  🌐 http://localhost:2026"
+echo "  🌐 http://localhost:2027"
 echo ""
 echo "  Routing: Frontend → Nginx → Gateway"
 echo "  API:     /api/langgraph/*  →  Gateway agent runtime"
-echo "           /api/*              →  Gateway REST API (8001)"
+echo "           /api/*              →  Gateway REST API (8002)"
 echo ""
 echo "  📋 Logs: logs/{gateway,frontend,nginx}.log"
 echo ""

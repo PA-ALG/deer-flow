@@ -7,7 +7,7 @@ run_playbook.py — 节点作战指引（开场播报用 · 不测算、只给�
 这是"开场播报 + 全程引导"产品形态的入口，不依赖目标/维度，零门槛。
 
 用法：
-  python run_playbook.py --user-id "CHENCHENG498" [--month 2026-07-01] [--format md]
+  python run_playbook.py [--month 2026-07-01] [--format md]
 """
 
 from __future__ import annotations
@@ -53,7 +53,8 @@ def render_md(pb: dict) -> str:
 
 def main():
     p = argparse.ArgumentParser(description="节点作战指引（开场播报）")
-    p.add_argument("--user-id", "-uid", required=True)
+    p.add_argument("--user-id", "-uid", default=None,
+                   help="本地调试兜底;生产身份由平台带外注入,无需传参")
     p.add_argument("--month", "-m", default=None, help="YYYY-MM-01，缺省=下月（规划口径）")
     p.add_argument("--format", "-f", choices=["json", "md"], default="json")
     a = p.parse_args()

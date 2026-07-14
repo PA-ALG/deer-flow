@@ -17,6 +17,18 @@ from nbev_core.render import render_results  # noqa: E402
 _fails = []
 
 
+import os as _os
+import tempfile as _tempfile
+
+
+def _fresh_store():
+    """plan_store 用例隔离:每个需要独立缓存空间的用例调用一次。"""
+    _os.environ["NBEV_OUTPUTS_DIR"] = _tempfile.mkdtemp(prefix="nbev-selftest-")
+
+
+_fresh_store()  # 兜底:整个 selftest 绝不污染真实 outputs
+
+
 def check(name, cond):
     print(("  ✅ " if cond else "  ❌ ") + name)
     if not cond:
@@ -175,6 +187,7 @@ def main():
                 "onJobHr": 22000, "workforceBreakdown": []}}
     planner.call_calculation = fake_fail
     _cmp.call_calculation = fake_fail
+    _fresh_store()  # 隔离:防止命中上一用例同参数的缓存方案
     out2 = planner.plan(user_id="U1", dimensions=["队伍"], target_nbev=6000, month="2026-07-01")
     check("基准失败不影响主测算", out2["results"][0]["status"] == "success")
     check("基准失败标记不可用", out2["results"][0]["comparison"]["available"] is False)
@@ -198,6 +211,61 @@ def main():
         os.environ.pop("APP_ENV", None)
     else:
         os.environ["APP_ENV"] = _old
+
+    # == 身份链(带外传递) ==
+    print("== 身份链 / plan_store ==")
+    from nbev_core.context import resolve_identity
+    from nbev_core.errors import SkillError as _SE
+    _saved = {k: os.environ.pop(k, None) for k in ("DEER_FLOW_USER_ID", "NBEV_USER_ID")}
+    try:
+        os.environ["DEER_FLOW_USER_ID"] = "u_platform"
+        os.environ["NBEV_USER_ID"] = "u_dev"
+        ident = resolve_identity("u_cli")
+        check("平台注入优先", ident.user_id == "u_platform" and ident.source == "platform")
+        os.environ.pop("DEER_FLOW_USER_ID")
+        check("env 覆盖次之", resolve_identity("u_cli").source == "env")
+        os.environ.pop("NBEV_USER_ID")
+        check("CLI 兜底", resolve_identity("u_cli").source == "cli")
+        try:
+            resolve_identity(None)
+            check("身份全缺→IDENTITY_MISSING", False)
+        except _SE as e:
+            check("身份全缺→IDENTITY_MISSING", e.code == "IDENTITY_MISSING")
+        # 身份缺失经 plan() 应返回结构化信封,绝不向用户澄清身份
+        out_noid = planner.plan(user_id=None, dimensions=["队伍"], target_nbev=1)
+        check("plan 身份缺失→runtime/validation信封",
+              out_noid["results"][0]["error"]["error_code"] == "IDENTITY_MISSING")
+    finally:
+        for k, v in _saved.items():
+            if v is not None:
+                os.environ[k] = v
+
+    # == plan_store:落盘 / 读回 / 缓存 / latest ==
+    from nbev_core import plan_store as _ps
+    _fresh_store()
+    def fake_ok(dim, payload):
+        if payload.get("is_baseline_query"):
+            raise Exception("no baseline")
+        return {"calculationSummary": {"predictedNbev": 6000, "achievementRate": 1.0,
+                "onJobHr": 22000, "workforceBreakdown": []}}
+    planner.call_calculation = fake_ok
+    _cmp.call_calculation = fake_ok
+    out_a = planner.plan(user_id="U1", dimensions=["队伍"], target_nbev=6000, month="2026-07-01")
+    check("成功测算产生 plan_id", bool(out_a.get("plan_id")))
+    rec = _ps.load(out_a["plan_id"])
+    check("plan 可读回", rec["plan_id"] == out_a["plan_id"])
+    check("latest 指向最新", _ps.latest()["plan_id"] == out_a["plan_id"])
+    out_b = planner.plan(user_id="U1", dimensions=["队伍"], target_nbev=6000, month="2026-07-01")
+    check("同参数命中缓存", out_b.get("cached") is True and out_b.get("plan_id") == out_a["plan_id"])
+    out_c = planner.plan(user_id="U1", dimensions=["队伍"], target_nbev=7000, month="2026-07-01")
+    check("变参数不命中缓存", not out_c.get("cached") and out_c.get("plan_id") != out_a["plan_id"])
+    md_pid = render_results(out_a)
+    check("MD 展示方案编号", out_a["plan_id"] in md_pid)
+    try:
+        _ps.load("plan_不存在")
+        check("载入不存在→PLAN_NOT_FOUND", False)
+    except _SE as e:
+        check("载入不存在→PLAN_NOT_FOUND", e.code == "PLAN_NOT_FOUND")
 
     print()
     if _fails:

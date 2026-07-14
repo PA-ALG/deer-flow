@@ -13,6 +13,7 @@ import time
 
 from . import config
 from .errors import ApiError
+from .http import _proxies_for  # 复用 vendor http 引擎的回环代理绕过
 from .obs import log
 
 try:
@@ -41,7 +42,8 @@ def query_dimension(dimension: str, *, request_id: str, org_id: str, month: str)
     for attempt in range(config.MAX_RETRY + 1):
         t0 = time.time()
         try:
-            resp = requests.post(url, json=body, timeout=config.API_TIMEOUT)
+            resp = requests.post(url, json=body, timeout=config.API_TIMEOUT,
+                                 proxies=_proxies_for(url))
             cost = round((time.time() - t0) * 1000)
             if resp.status_code >= 500:
                 last = ApiError("UPSTREAM_5XX", f"HTTP {resp.status_code}", retryable=True)
